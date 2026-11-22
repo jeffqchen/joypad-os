@@ -121,34 +121,46 @@ bool tink_command_start_repeat(tink_command_t command)
     return true;
 }
 
-bool tink_command_repeat_tick(void)
+tink_repeat_result_t tink_command_repeat_tick(void)
 {
     if (repeat_using_ir) {
         if (command_uses_full_frame_repeat(active_repeat_command)) {
             const tink_command_mapping_t *mapping =
                 get_command_mapping(active_repeat_command);
 
-            return mapping != NULL &&
-                   ir_tx_queue_full_repeat_frame(mapping->ir_code);
+            if (mapping == NULL) {
+                tink_command_stop_repeat();
+                return TINK_REPEAT_ENDED;
+            }
+
+            return ir_tx_queue_full_repeat_frame(mapping->ir_code)
+                ? TINK_REPEAT_ACCEPTED
+                : TINK_REPEAT_BUSY;
         }
 
-        return true;
+        return TINK_REPEAT_ACCEPTED;
     }
 
     if (repeat_using_cdc) {
         if (!tink_cdc_is_connected() || !tink_cdc_is_online()) {
             tink_command_stop_repeat();
-            return false;
+            return TINK_REPEAT_ENDED;
         }
 
         const tink_command_mapping_t *mapping =
             get_command_mapping(active_repeat_command);
 
-        return mapping != NULL && mapping->serial_command != NULL &&
-               tink_cdc_send_command(mapping->serial_command);
+        if (mapping == NULL || mapping->serial_command == NULL) {
+            tink_command_stop_repeat();
+            return TINK_REPEAT_ENDED;
+        }
+
+        return tink_cdc_send_command(mapping->serial_command)
+            ? TINK_REPEAT_ACCEPTED
+            : TINK_REPEAT_BUSY;
     }
 
-    return false;
+    return TINK_REPEAT_ENDED;
 }
 
 void tink_command_stop_repeat(void)

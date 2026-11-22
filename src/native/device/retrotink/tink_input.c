@@ -148,17 +148,28 @@ static void process_repeat_controls(uint32_t controls, uint64_t now)
             ? RETROTINK_INPUT_COUNT
             : get_repeat_control(controls);
 
-    if (desired == active_repeat_control && repeat_active) {
-        if (now < next_repeat_time)
+    if (desired == active_repeat_control) {
+        if (!repeat_active || now < next_repeat_time)
             return;
 
-        if (tink_command_repeat_tick())
-            next_repeat_time = now + REPEAT_INTERVAL_US;
+        switch (tink_command_repeat_tick()) {
+            case TINK_REPEAT_ACCEPTED:
+            case TINK_REPEAT_BUSY:
+                next_repeat_time = now + REPEAT_INTERVAL_US;
+                break;
+
+            case TINK_REPEAT_ENDED:
+                repeat_active = false;
+                next_repeat_time = 0;
+                /* Keep the control latched until it is released or changes. */
+                break;
+        }
 
         return;
     }
 
     stop_selected_repeat();
+    active_repeat_control = RETROTINK_INPUT_COUNT;
 
     if (desired != RETROTINK_INPUT_COUNT) {
         tink_command_t command = get_repeat_command(desired);

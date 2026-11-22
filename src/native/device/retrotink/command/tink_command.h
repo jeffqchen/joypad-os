@@ -6,6 +6,19 @@
 #include <stdint.h>
 
 /*
+ * Result of processing one repeat tick.
+ *
+ * ACCEPTED: the repeat was handled or queued.
+ * BUSY: the transport is active but cannot accept this tick yet.
+ * ENDED: the repeat session is no longer valid.
+ */
+typedef enum {
+    TINK_REPEAT_ACCEPTED,
+    TINK_REPEAT_BUSY,
+    TINK_REPEAT_ENDED
+} tink_repeat_result_t;
+
+/*
  * Logical RetroTINK commands.
  *
  * These commands are independent of the transport.
@@ -62,12 +75,13 @@ bool tink_command_start_repeat(tink_command_t command);
 void tink_command_stop_repeat(void);
 
 /*
- * Send one repeat tick.
+ * Process one repeat tick.
  *
- * For CDC, sends another individual remote command.
- * For IR, hardware repeat handles transmission automatically.
+ * ACCEPTED means the tick was handled or queued.
+ * BUSY means the active transport cannot accept it yet; retry later.
+ * ENDED means the repeat session is no longer valid.
  */
-bool tink_command_repeat_tick(void);
+tink_repeat_result_t tink_command_repeat_tick(void);
 
 /*
  * Check whether the CDC transport is connected.
