@@ -160,8 +160,10 @@ static void attempt_selected_repeat_start(
             next_repeat_time =
                 now + get_repeat_initial_interval(control);
 
-            printf("[tink_input] Repeat started: control %u\n",
-                   (unsigned)control);
+            if (tink_command_is_cdc_connected()) {
+                printf("[tink_input] Repeat started: control %u\n",
+                       (unsigned)control);
+            }
             break;
 
         case TINK_REPEAT_BUSY:
@@ -300,7 +302,7 @@ static void process_safe_gesture(uint32_t controls, uint64_t now)
             case TINK_REPEAT_ACCEPTED:
                 safe_ir_repeat_active = true;
                 safe_next_retry_time = 0;
-                printf("[tink_input] IR SAFE repeat started\n");
+                /* The IR transmitter reports when its first repeat frame begins. */
                 break;
 
             case TINK_REPEAT_BUSY:
@@ -362,6 +364,10 @@ void tink_input_task(void)
     uint64_t now = time_us_64();
     uint32_t controls = current_controls;
     uint32_t pressed = controls & ~previous_controls;
+
+    if (tink_command_take_ir_repeat_started_event()) {
+        printf("[tink_input] IR repeat frame started\n");
+    }
 
     process_single_presses(pressed);
     process_repeat_controls(controls, now);

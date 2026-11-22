@@ -89,4 +89,7 @@ tink_repeat_result_t tink_command_repeat_tick(void);
  */
 bool tink_command_is_cdc_connected(void);
 
+/* True once an IR repeat frame has actually begun transmitting. */
+bool tink_command_take_ir_repeat_started_event(void);
+
 #endif /* TINK_COMMAND_H */

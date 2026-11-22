@@ -29,6 +29,7 @@ typedef struct {
     uint16_t command;
     bool is_repeat;
     bool full_frame_repeat;
+    bool initial_frame;
     uint32_t generation;
 } tx_queue_entry_t;
 
@@ -51,6 +52,8 @@ static uint64_t tx_frame_start_time_us;
 /* Repeat-session information shared with the alarm callback. */
 static volatile bool repeat_active;
 static volatile uint32_t repeat_generation;
+static volatile bool repeat_started_event;
+static volatile bool repeat_start_notified;
 
 static uint slice_num;
 static uint16_t carrier_duty;
@@ -170,7 +173,12 @@ static int64_t ir_alarm_callback(
                 repeat_session_is_active() &&
                 !tx_frame_full_repeat) {
 
-                /* Use the special NEC repeat frame. */
+                /* The first NEC repeat frame begins after the initial frame gap. */
+                if (!repeat_start_notified) {
+                    repeat_started_event = true;
+                    repeat_start_notified = true;
+                }
+
                 return start_repeat_frame();
             }
 
@@ -218,6 +226,8 @@ void ir_tx_init(void)
 
     repeat_active = false;
     repeat_generation = 0;
+    repeat_started_event = false;
+    repeat_start_notified = false;
 
     gpio_set_function(IR_TX_GPIO, GPIO_FUNC_PWM);
 
@@ -257,6 +267,7 @@ bool ir_tx_enqueue(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = false;
     command_queue[queue_head].full_frame_repeat = false;
+    command_queue[queue_head].initial_frame = false;
     command_queue[queue_head].generation = 0;
     
     queue_head = next;
@@ -284,12 +295,15 @@ bool ir_tx_start_repeat(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = false;
+    command_queue[queue_head].initial_frame = true;
     command_queue[queue_head].generation = new_generation;
     
     queue_head = next;
 
     repeat_generation = new_generation;
     repeat_active = true;
+    repeat_started_event = false;
+    repeat_start_notified = false;
 
     return true;
 }
@@ -313,6 +327,7 @@ bool ir_tx_queue_full_repeat_frame(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = true;
+    command_queue[queue_head].initial_frame = false;
     command_queue[queue_head].generation = repeat_generation;
     
     queue_head = next;
@@ -334,6 +349,7 @@ bool ir_tx_start_full_repeat(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = true;
+    command_queue[queue_head].initial_frame = true;
     command_queue[queue_head].generation = new_generation;
     
     queue_head = next;
@@ -354,6 +370,17 @@ void ir_tx_stop_repeat(void)
 {
     repeat_active = false;
     repeat_generation++;
+}
+
+/* Consume the task-context notification that a repeat frame actually began. */
+bool ir_tx_take_repeat_started_event(void)
+{
+    if (!repeat_started_event) {
+        return false;
+    }
+
+    repeat_started_event = false;
+    return true;
 }
 
 /*
@@ -397,6 +424,12 @@ start_transmission:
     tx_frame_is_repeat = entry.is_repeat;
     tx_frame_repeat_generation = entry.generation;
     tx_frame_full_repeat = entry.full_frame_repeat;
+
+    /* Full-frame repeats begin only after the initial hold delay and are queued. */
+    if (entry.is_repeat && !entry.initial_frame && !repeat_start_notified) {
+        repeat_started_event = true;
+        repeat_start_notified = true;
+    }
 
     tx_frame_start_time_us = time_us_64();
     
