@@ -27,9 +27,10 @@ static const tink_command_t cycle_commands[] = {
 
 static uint8_t selected_command;
 
-/* Currently repeating logical control. */
+/* Currently selected ordinary repeat control. */
 static retrotink_input_t active_repeat_control;
 static bool repeat_active;
+static bool repeat_start_pending;
 static uint64_t next_repeat_time;
 
 /* Home long press. */
@@ -42,6 +43,8 @@ static uint64_t safe_press_time;
 static bool safe_timer_active;
 static bool safe_command_attempted;
 static bool safe_ir_repeat_active;
+static bool safe_ir_start_failed;
+static uint64_t safe_next_retry_time;
 
 static bool control_pressed(uint32_t controls, retrotink_input_t input)
 {
@@ -65,6 +68,7 @@ void tink_input_reset(void)
     tink_command_stop_repeat();
 
     repeat_active = false;
+    repeat_start_pending = false;
     active_repeat_control = RETROTINK_INPUT_COUNT;
     next_repeat_time = 0;
 
@@ -76,6 +80,8 @@ void tink_input_reset(void)
     safe_timer_active = false;
     safe_command_attempted = false;
     safe_ir_repeat_active = false;
+    safe_ir_start_failed = false;
+    safe_next_retry_time = 0;
 }
 
 void tink_input_init(void)
@@ -132,8 +138,44 @@ static void stop_selected_repeat(void)
 {
     if (repeat_active) {
         tink_command_stop_repeat();
-        repeat_active = false;
-        active_repeat_control = RETROTINK_INPUT_COUNT;
+    }
+
+    repeat_active = false;
+    repeat_start_pending = false;
+    active_repeat_control = RETROTINK_INPUT_COUNT;
+    next_repeat_time = 0;
+}
+
+static void attempt_selected_repeat_start(
+    retrotink_input_t control,
+    uint64_t now)
+{
+    tink_repeat_result_t result =
+        tink_command_start_repeat(get_repeat_command(control));
+
+    switch (result) {
+        case TINK_REPEAT_ACCEPTED:
+            repeat_active = true;
+            repeat_start_pending = false;
+            next_repeat_time =
+                now + get_repeat_initial_interval(control);
+
+            printf("[tink_input] Repeat started: control %u\n",
+                   (unsigned)control);
+            break;
+
+        case TINK_REPEAT_BUSY:
+            repeat_active = false;
+            repeat_start_pending = true;
+            next_repeat_time = now + REPEAT_INTERVAL_US;
+            break;
+
+        case TINK_REPEAT_ENDED:
+            repeat_active = false;
+            repeat_start_pending = false;
+            next_repeat_time = 0;
+            /* Keep the control latched until it is released or changes. */
+            break;
     }
 }
 
@@ -149,7 +191,15 @@ static void process_repeat_controls(uint32_t controls, uint64_t now)
             : get_repeat_control(controls);
 
     if (desired == active_repeat_control) {
-        if (!repeat_active || now < next_repeat_time)
+        if (now < next_repeat_time)
+            return;
+
+        if (repeat_start_pending) {
+            attempt_selected_repeat_start(desired, now);
+            return;
+        }
+
+        if (!repeat_active)
             return;
 
         switch (tink_command_repeat_tick()) {
@@ -169,20 +219,10 @@ static void process_repeat_controls(uint32_t controls, uint64_t now)
     }
 
     stop_selected_repeat();
-    active_repeat_control = RETROTINK_INPUT_COUNT;
 
     if (desired != RETROTINK_INPUT_COUNT) {
-        tink_command_t command = get_repeat_command(desired);
-
-        if (tink_command_start_repeat(command)) {
-            active_repeat_control = desired;
-            repeat_active = true;
-            next_repeat_time =
-                now + get_repeat_initial_interval(desired);
-
-            printf("[tink_input] Repeat started: control %u\n",
-                   (unsigned)desired);
-        }
+        active_repeat_control = desired;
+        attempt_selected_repeat_start(desired, now);
     }
 }
 
@@ -218,8 +258,9 @@ static void process_home_long_press(uint32_t controls, uint64_t now)
 /*
  * L3 + R3:
  * - Without mounted CDC: start native NEC SAFE repeat immediately.
+ *   Temporary IR congestion is retried at the normal repeat interval.
  * - With mounted CDC: send SAFE once after a two-second hold.
- *   A failed attempt while CDC is offline is not retried each task tick.
+ *   A failed CDC attempt is not retried each task tick.
  */
 static void process_safe_gesture(uint32_t controls, uint64_t now)
 {
@@ -237,6 +278,8 @@ static void process_safe_gesture(uint32_t controls, uint64_t now)
 
         safe_timer_active = false;
         safe_command_attempted = false;
+        safe_ir_start_failed = false;
+        safe_next_retry_time = 0;
         return;
     }
 
@@ -248,11 +291,28 @@ static void process_safe_gesture(uint32_t controls, uint64_t now)
     }
 
     if (!tink_command_is_cdc_connected()) {
-        if (!safe_ir_repeat_active &&
-            tink_command_start_repeat(TINK_CMD_SAFE)) {
-            safe_ir_repeat_active = true;
-            printf("[tink_input] IR SAFE repeat started\n");
+        if (safe_ir_repeat_active || safe_ir_start_failed ||
+            now < safe_next_retry_time) {
+            return;
         }
+
+        switch (tink_command_start_repeat(TINK_CMD_SAFE)) {
+            case TINK_REPEAT_ACCEPTED:
+                safe_ir_repeat_active = true;
+                safe_next_retry_time = 0;
+                printf("[tink_input] IR SAFE repeat started\n");
+                break;
+
+            case TINK_REPEAT_BUSY:
+                safe_next_retry_time = now + REPEAT_INTERVAL_US;
+                break;
+
+            case TINK_REPEAT_ENDED:
+                safe_ir_start_failed = true;
+                safe_next_retry_time = 0;
+                break;
+        }
+
         return;
     }
 

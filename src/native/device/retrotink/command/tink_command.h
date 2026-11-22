@@ -1,4 +1,3 @@
-
 #ifndef TINK_COMMAND_H
 #define TINK_COMMAND_H
 
@@ -6,11 +5,11 @@
 #include <stdint.h>
 
 /*
- * Result of processing one repeat tick.
+ * Result of starting or processing a repeat.
  *
- * ACCEPTED: the repeat was handled or queued.
- * BUSY: the transport is active but cannot accept this tick yet.
- * ENDED: the repeat session is no longer valid.
+ * ACCEPTED: the repeat was started, handled, or queued.
+ * BUSY: the transport is active but cannot accept the request yet.
+ * ENDED: the request cannot be started or the repeat session is invalid.
  */
 typedef enum {
     TINK_REPEAT_ACCEPTED,
@@ -63,11 +62,13 @@ bool tink_command_send(tink_command_t command);
 /*
  * Start a repeating logical command.
  *
+ * Returns ACCEPTED when started, BUSY when it should be retried later,
+ * or ENDED when the request cannot be started.
+ *
  * IR uses hardware repeat.
- * CDC uses individual queued commands,
- * scheduled by the input layer.
+ * CDC uses individual queued commands, scheduled by the input layer.
  */
-bool tink_command_start_repeat(tink_command_t command);
+tink_repeat_result_t tink_command_start_repeat(tink_command_t command);
 
 /*
  * Stop the currently repeating command.

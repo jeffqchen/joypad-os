@@ -83,26 +83,33 @@ static bool command_uses_full_frame_repeat(tink_command_t command)
            command == TINK_CMD_BACK;
 }
 
-bool tink_command_start_repeat(tink_command_t command)
+tink_repeat_result_t tink_command_start_repeat(tink_command_t command)
 {
     const tink_command_mapping_t *mapping = get_command_mapping(command);
 
     tink_command_stop_repeat();
 
     if (mapping == NULL) {
-        return false;
+        return TINK_REPEAT_ENDED;
     }
 
-    /* CDC repeats are individual serial commands and require an online device. */
+    /*
+     * A mounted CDC transport remains authoritative. Offline state and
+     * temporary queue congestion are retryable; neither selects IR.
+     */
     if (tink_cdc_is_connected()) {
-        if (!tink_cdc_is_online() || mapping->serial_command == NULL ||
+        if (mapping->serial_command == NULL) {
+            return TINK_REPEAT_ENDED;
+        }
+
+        if (!tink_cdc_is_online() ||
             !tink_cdc_send_command(mapping->serial_command)) {
-            return false;
+            return TINK_REPEAT_BUSY;
         }
 
         active_repeat_command = command;
         repeat_using_cdc = true;
-        return true;
+        return TINK_REPEAT_ACCEPTED;
     }
 
     bool started;
@@ -113,12 +120,13 @@ bool tink_command_start_repeat(tink_command_t command)
     }
 
     if (!started) {
-        return false;
+        /* The IR transmitter/queue is temporarily unavailable. */
+        return TINK_REPEAT_BUSY;
     }
 
     active_repeat_command = command;
     repeat_using_ir = true;
-    return true;
+    return TINK_REPEAT_ACCEPTED;
 }
 
 tink_repeat_result_t tink_command_repeat_tick(void)
