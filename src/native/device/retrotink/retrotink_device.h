@@ -6,33 +6,44 @@
 #include "core/input_event.h"
 #include "core/output_interface.h"
 
+/*
+ * Logical controls accepted by the RetroTINK output interface.
+ * Physical controller mappings belong to the application.
+ */
+typedef enum {
+    RETROTINK_INPUT_UP = 0,
+    RETROTINK_INPUT_DOWN,
+    RETROTINK_INPUT_LEFT,
+    RETROTINK_INPUT_RIGHT,
+    RETROTINK_INPUT_OK,
+    RETROTINK_INPUT_BACK,
+    RETROTINK_INPUT_MENU,
+    RETROTINK_INPUT_DIAG,
+    RETROTINK_INPUT_PROF,
+    RETROTINK_INPUT_NEXT,
+    RETROTINK_INPUT_PREVIOUS,
+    RETROTINK_INPUT_HOME,
+    RETROTINK_INPUT_L3,
+    RETROTINK_INPUT_R3,
+    RETROTINK_INPUT_COUNT
+} retrotink_input_t;
+
+#define RETROTINK_INPUT_BIT(input) (1u << (input))
+
 extern const OutputInterface retrotink_output_interface;
 
-/*
- * Initialize the RetroTINK output interface.
- *
- * Called by the application after USB Host and router initialization.
- */
 void retrotink_device_start(void);
-
-/*
- * Periodic output processing.
- *
- * Called through OutputInterface.task().
- */
 void retrotink_device_task(void);
-
-/*
- * Notify the device that its input controller disconnected.
- */
 void retrotink_device_controller_disconnected(void);
 
 /*
- * Optional application callback for input events.
- *
- * Allows the application to handle Bluetooth-specific activity
- * tracking and controller feedback without coupling those features
- * to the RetroTINK output module.
+ * Publish the complete logical-control state. The output interface owns
+ * edge detection, hold timing, gestures, and repeat behaviour.
+ */
+void retrotink_device_set_input_state(uint32_t controls);
+
+/*
+ * Optional application callback for Bluetooth activity and rumble.
  */
 typedef void (*retrotink_input_callback_t)(
     const input_event_t *event
