@@ -29,7 +29,6 @@ typedef struct {
     uint16_t command;
     bool is_repeat;
     bool full_frame_repeat;
-    bool initial_frame;
     uint32_t generation;
 } tx_queue_entry_t;
 
@@ -267,7 +266,6 @@ bool ir_tx_enqueue(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = false;
     command_queue[queue_head].full_frame_repeat = false;
-    command_queue[queue_head].initial_frame = false;
     command_queue[queue_head].generation = 0;
     
     queue_head = next;
@@ -295,7 +293,6 @@ bool ir_tx_start_repeat(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = false;
-    command_queue[queue_head].initial_frame = true;
     command_queue[queue_head].generation = new_generation;
     
     queue_head = next;
@@ -327,7 +324,6 @@ bool ir_tx_queue_full_repeat_frame(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = true;
-    command_queue[queue_head].initial_frame = false;
     command_queue[queue_head].generation = repeat_generation;
     
     queue_head = next;
@@ -349,7 +345,6 @@ bool ir_tx_start_full_repeat(uint16_t command)
     command_queue[queue_head].command = command;
     command_queue[queue_head].is_repeat = true;
     command_queue[queue_head].full_frame_repeat = true;
-    command_queue[queue_head].initial_frame = true;
     command_queue[queue_head].generation = new_generation;
     
     queue_head = next;
