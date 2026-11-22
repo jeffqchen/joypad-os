@@ -1,4 +1,3 @@
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,11 +6,11 @@
 #include "tink_input.h"
 #include "command/tink_command.h"
 
-#include "core/buttons.h"
+#include "native/device/retrotink/retrotink_device.h"
 #include "pico/time.h"
 
-static uint32_t current_buttons;
-static uint32_t previous_buttons;
+static uint32_t current_controls;
+static uint32_t previous_controls;
 
 /* Triangle and Square command selection. */
 static const tink_command_t cycle_commands[] = {
@@ -28,209 +27,196 @@ static const tink_command_t cycle_commands[] = {
 
 static uint8_t selected_command;
 
-/* Currently repeating controller button. */
-static uint32_t active_repeat_button;
+/* Currently repeating logical control. */
+static retrotink_input_t active_repeat_control;
+static bool repeat_active;
 static uint64_t next_repeat_time;
 
-/* PS button long press. */
-static uint64_t ps_press_time;
-static bool ps_timer_active;
-static bool ps_command_sent;
+/* Home long press. */
+static uint64_t home_press_time;
+static bool home_timer_active;
+static bool home_command_sent;
 
-/* L3 + R3 long press. */
+/* L3 + R3 SAFE gesture. */
 static uint64_t safe_press_time;
 static bool safe_timer_active;
-static bool safe_command_sent;
-static bool safe_ir_repeat_active = false;
+static bool safe_command_attempted;
+static bool safe_ir_repeat_active;
 
-void tink_input_process(uint32_t buttons)
+static bool control_pressed(uint32_t controls, retrotink_input_t input)
 {
-    current_buttons = buttons;
+    return (controls & RETROTINK_INPUT_BIT(input)) != 0;
 }
 
+void tink_input_set_state(uint32_t controls)
+{
+    current_controls = controls;
+}
+
+void tink_input_reset(void)
+{
+    current_controls = 0;
+    previous_controls = 0;
+
+    /*
+     * Stop unconditionally: SAFE's native IR repeat is independent of
+     * the ordinary repeat-selection state.
+     */
+    tink_command_stop_repeat();
+
+    repeat_active = false;
+    active_repeat_control = RETROTINK_INPUT_COUNT;
+    next_repeat_time = 0;
+
+    home_press_time = 0;
+    home_timer_active = false;
+    home_command_sent = false;
+
+    safe_press_time = 0;
+    safe_timer_active = false;
+    safe_command_attempted = false;
+    safe_ir_repeat_active = false;
+}
 
 void tink_input_init(void)
 {
     tink_command_init();
-    
-    current_buttons = 0;
-    previous_buttons = 0;
-
     selected_command = 0;
-
-    active_repeat_button = 0;
-    next_repeat_time = 0;
-
-    ps_press_time = 0;
-    ps_timer_active = false;
-
-    safe_press_time = 0;
-    safe_timer_active = false;
-    safe_command_sent = false;
-
-    ps_command_sent = false;
+    tink_input_reset();
 }
-
 
 /*
- * Repeat priority:
- * Up > Down > Left > Right > Circle.
+ * Preserve the existing repeat-selection priority:
+ * LEFT > RIGHT > DOWN > UP > BACK.
  */
-static uint32_t get_repeat_button(uint32_t buttons)
+static retrotink_input_t get_repeat_control(uint32_t controls)
 {
-    if (buttons & JP_BUTTON_DL)
-        return JP_BUTTON_DL;
+    if (control_pressed(controls, RETROTINK_INPUT_LEFT))
+        return RETROTINK_INPUT_LEFT;
+    if (control_pressed(controls, RETROTINK_INPUT_RIGHT))
+        return RETROTINK_INPUT_RIGHT;
+    if (control_pressed(controls, RETROTINK_INPUT_DOWN))
+        return RETROTINK_INPUT_DOWN;
+    if (control_pressed(controls, RETROTINK_INPUT_UP))
+        return RETROTINK_INPUT_UP;
+    if (control_pressed(controls, RETROTINK_INPUT_BACK))
+        return RETROTINK_INPUT_BACK;
 
-    if (buttons & JP_BUTTON_DR)
-        return JP_BUTTON_DR;
-
-    if (buttons & JP_BUTTON_DD)
-        return JP_BUTTON_DD;
-
-    if (buttons & JP_BUTTON_DU)
-        return JP_BUTTON_DU;
-
-    if (buttons & JP_BUTTON_B2)
-        return JP_BUTTON_B2;
-
-    return 0;
+    return RETROTINK_INPUT_COUNT;
 }
 
-
-static tink_command_t get_repeat_command(uint32_t button)
+static tink_command_t get_repeat_command(retrotink_input_t control)
 {
-    switch (button) {
-
-        case JP_BUTTON_DU:
-            return TINK_CMD_UP;
-
-        case JP_BUTTON_DD:
-            return TINK_CMD_DOWN;
-
-        case JP_BUTTON_DL:
-            return TINK_CMD_LEFT;
-
-        case JP_BUTTON_DR:
-            return TINK_CMD_RIGHT;
-
-        case JP_BUTTON_B2:
-            return TINK_CMD_BACK;
-
-        default:
-            return TINK_CMD_BACK;
+    switch (control) {
+        case RETROTINK_INPUT_UP:    return TINK_CMD_UP;
+        case RETROTINK_INPUT_DOWN:  return TINK_CMD_DOWN;
+        case RETROTINK_INPUT_LEFT:  return TINK_CMD_LEFT;
+        case RETROTINK_INPUT_RIGHT: return TINK_CMD_RIGHT;
+        case RETROTINK_INPUT_BACK:  return TINK_CMD_BACK;
+        default:                   return TINK_CMD_BACK;
     }
 }
 
-static uint64_t get_repeat_initial_interval(uint32_t button)
+static uint64_t get_repeat_initial_interval(retrotink_input_t control)
 {
-    if (button == JP_BUTTON_DU ||
-        button == JP_BUTTON_DD ||
-        button == JP_BUTTON_B2) {
+    if (control == RETROTINK_INPUT_UP ||
+        control == RETROTINK_INPUT_DOWN ||
+        control == RETROTINK_INPUT_BACK) {
         return REPEAT_NAV_INITIAL_DELAY_US;
     }
 
     return REPEAT_INITIAL_DELAY_US;
 }
 
-/*
- * Handles D-pad and Circle repeat behavior.
- */
-static void process_repeat_buttons(
-    uint32_t buttons,
-    uint64_t now)
+static void stop_selected_repeat(void)
 {
-    uint32_t desired_button =
-        get_repeat_button(buttons);
+    if (repeat_active) {
+        tink_command_stop_repeat();
+        repeat_active = false;
+        active_repeat_control = RETROTINK_INPUT_COUNT;
+    }
+}
 
-    /* No change to the currently repeating button. */
-    if (desired_button == active_repeat_button &&
-        active_repeat_button != 0) {
+static void process_repeat_controls(uint32_t controls, uint64_t now)
+{
+    const uint32_t safe_combo =
+        RETROTINK_INPUT_BIT(RETROTINK_INPUT_L3) |
+        RETROTINK_INPUT_BIT(RETROTINK_INPUT_R3);
 
+    retrotink_input_t desired =
+        (controls & safe_combo) == safe_combo
+            ? RETROTINK_INPUT_COUNT
+            : get_repeat_control(controls);
+
+    if (desired == active_repeat_control && repeat_active) {
         if (now < next_repeat_time)
             return;
 
-        if (tink_command_repeat_tick()) {
+        if (tink_command_repeat_tick())
             next_repeat_time = now + REPEAT_INTERVAL_US;
-        }
 
         return;
     }
 
-    /* Stop the previous repeat session. */
-    if (active_repeat_button != 0) {
-        tink_command_stop_repeat();
-        active_repeat_button = 0;
-    }
+    stop_selected_repeat();
 
-    /* Start the newly selected repeat session immediately. */
-    if (desired_button != 0) {
-
-        tink_command_t command =
-            get_repeat_command(desired_button);
+    if (desired != RETROTINK_INPUT_COUNT) {
+        tink_command_t command = get_repeat_command(desired);
 
         if (tink_command_start_repeat(command)) {
-
-            active_repeat_button = desired_button;
-
+            active_repeat_control = desired;
+            repeat_active = true;
             next_repeat_time =
-                now + get_repeat_initial_interval(desired_button);
+                now + get_repeat_initial_interval(desired);
 
-            printf("[tink_input] Repeat started: button 0x%08lX\n",
-                   (unsigned long)desired_button);
+            printf("[tink_input] Repeat started: control %u\n",
+                   (unsigned)desired);
         }
     }
 }
 
 /*
- * PS button:
- * Send POWER immediately after being held
- * for at least 1.5 seconds.
+ * HOME: send POWER once after a 1.5-second hold.
  */
-static void process_ps_long_press(
-    uint32_t buttons,
-    uint64_t now)
+static void process_home_long_press(uint32_t controls, uint64_t now)
 {
-    bool ps_pressed =
-        (buttons & JP_BUTTON_A1) != 0;
+    bool pressed = control_pressed(controls, RETROTINK_INPUT_HOME);
 
-    if (!ps_pressed) {
-        ps_timer_active = false;
-        ps_command_sent = false;
+    if (!pressed) {
+        home_timer_active = false;
+        home_command_sent = false;
         return;
     }
 
-    if (!ps_timer_active) {
-        ps_press_time = now;
-        ps_timer_active = true;
-        ps_command_sent = false;
+    if (!home_timer_active) {
+        home_press_time = now;
+        home_timer_active = true;
+        home_command_sent = false;
         return;
     }
 
-    if (!ps_command_sent &&
-        now - ps_press_time >= PS_HOLD_TIME_US) {
+    if (!home_command_sent &&
+        now - home_press_time >= PS_HOLD_TIME_US) {
+        if (tink_command_send(TINK_CMD_POWER))
+            printf("[tink_input] HOME long press: POWER\n");
 
-        if (tink_command_send(TINK_CMD_POWER)) {
-            printf("[tink_input] PS long press: POWER\n");
-        }
-
-        ps_command_sent = true;
+        home_command_sent = true;
     }
 }
 
 /*
  * L3 + R3:
- * IR: Repeat SAFE while both buttons are held.
- * CDC: Send SAFE once after a two-second hold.
+ * - Without mounted CDC: start native NEC SAFE repeat immediately.
+ * - With mounted CDC: send SAFE once after a two-second hold.
+ *   A failed attempt while CDC is offline is not retried each task tick.
  */
-static void process_safe_long_press(
-    uint32_t buttons,
-    uint64_t now)
+static void process_safe_gesture(uint32_t controls, uint64_t now)
 {
     const uint32_t combo =
-        JP_BUTTON_L3 | JP_BUTTON_R3;
+        RETROTINK_INPUT_BIT(RETROTINK_INPUT_L3) |
+        RETROTINK_INPUT_BIT(RETROTINK_INPUT_R3);
 
-    bool both_pressed =
-        (buttons & combo) == combo;
+    bool both_pressed = (controls & combo) == combo;
 
     if (!both_pressed) {
         if (safe_ir_repeat_active) {
@@ -239,80 +225,58 @@ static void process_safe_long_press(
         }
 
         safe_timer_active = false;
-        safe_command_sent = false;
+        safe_command_attempted = false;
         return;
     }
 
     if (!safe_timer_active) {
         safe_press_time = now;
         safe_timer_active = true;
-        safe_command_sent = false;
-
-        /* End any previously active button repeat. */
-        if (active_repeat_button != 0) {
-            tink_command_stop_repeat();
-            active_repeat_button = 0;
-        }
+        safe_command_attempted = false;
+        stop_selected_repeat();
     }
 
-    /* IR: Start hardware-managed SAFE repeating. */
     if (!tink_command_is_cdc_connected()) {
         if (!safe_ir_repeat_active &&
             tink_command_start_repeat(TINK_CMD_SAFE)) {
-
             safe_ir_repeat_active = true;
             printf("[tink_input] IR SAFE repeat started\n");
         }
-
         return;
     }
 
-    /* CDC: Send SAFE once after two seconds. */
-    if (!safe_command_sent &&
+    if (!safe_command_attempted &&
         now - safe_press_time >= LONG_PRESS_TIME_US) {
-
-        if (tink_command_send(TINK_CMD_SAFE)) {
+        if (tink_command_send(TINK_CMD_SAFE))
             printf("[tink_input] CDC SAFE command sent\n");
-            safe_command_sent = true;
-        }
+
+        safe_command_attempted = true;
     }
 }
 
-/*
- * Handles one-shot button presses.
- */
-static void process_single_press(uint32_t pressed)
+static void process_single_presses(uint32_t pressed)
 {
-    /* Cross = OK */
-    if (pressed & JP_BUTTON_B1)
+    if (control_pressed(pressed, RETROTINK_INPUT_OK))
         tink_command_send(TINK_CMD_OK);
 
-    /* Options = Menu */
-    if (pressed & JP_BUTTON_S2)
+    if (control_pressed(pressed, RETROTINK_INPUT_MENU))
         tink_command_send(TINK_CMD_MENU);
 
-    /* Share = Diagnostic */
-    if (pressed & JP_BUTTON_S1)
+    if (control_pressed(pressed, RETROTINK_INPUT_DIAG))
         tink_command_send(TINK_CMD_DIAG);
 
-    /* Touchpad click = Profile */
-    if (pressed & JP_BUTTON_A2)
+    if (control_pressed(pressed, RETROTINK_INPUT_PROF))
         tink_command_send(TINK_CMD_PROF);
 
-    /* Triangle = next command */
-    if (pressed & JP_BUTTON_B4) {
-
+    if (control_pressed(pressed, RETROTINK_INPUT_NEXT)) {
         selected_command++;
-
         if (selected_command >= CYCLE_COMMAND_COUNT)
             selected_command = 0;
 
         tink_command_send(cycle_commands[selected_command]);
     }
 
-    /* Square = previous command */
-    if (pressed & JP_BUTTON_B3) {
-
+    if (control_pressed(pressed, RETROTINK_INPUT_PREVIOUS)) {
         if (selected_command == 0)
             selected_command = CYCLE_COMMAND_COUNT - 1;
         else
@@ -322,54 +286,16 @@ static void process_single_press(uint32_t pressed)
     }
 }
 
-
-/*
- * Call continuously from app_task().
- */
 void tink_input_task(void)
 {
     uint64_t now = time_us_64();
+    uint32_t controls = current_controls;
+    uint32_t pressed = controls & ~previous_controls;
 
-    uint32_t buttons = current_buttons;
+    process_single_presses(pressed);
+    process_repeat_controls(controls, now);
+    process_home_long_press(controls, now);
+    process_safe_gesture(controls, now);
 
-    uint32_t pressed =
-        buttons & ~previous_buttons;
-
-    process_single_press(pressed);
-
-    process_repeat_buttons(buttons, now);
-
-    process_ps_long_press(buttons, now);
-
-    process_safe_long_press(buttons, now);
-
-    previous_buttons = buttons;
-}
-
-
-/*
- * Called when the controller disconnects.
- */
-void tink_input_controller_disconnected(void)
-{
-    current_buttons = 0;
-    previous_buttons = 0;
-
-    if (active_repeat_button != 0) {
-        tink_command_stop_repeat();
-        active_repeat_button = 0;
-    }
-
-    next_repeat_time = 0;
-
-    ps_timer_active = false;
-    ps_press_time = 0;
-
-    safe_timer_active = false;
-    safe_press_time = 0;
-    safe_command_sent = false;
-
-    ps_command_sent = false;
-
-    printf("[tink_input] Controller disconnected\n");
+    previous_controls = controls;
 }
