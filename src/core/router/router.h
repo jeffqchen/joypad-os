@@ -73,6 +73,7 @@ typedef enum {
     OUTPUT_TARGET_WII_EXTENSION,              // Wii extension I2C slave (bt2wiiex apps)
     OUTPUT_TARGET_AMIGA,
     OUTPUT_TARGET_REMOTE_PLAY,      // PS Remote Play (WiFi) — usb2wifi app
+    OUTPUT_TARGET_RETROTINK,        // RetroTINK IR / USB CDC output
     OUTPUT_TARGET_COUNT             // Must be last — used to size arrays
 } output_target_t;
 

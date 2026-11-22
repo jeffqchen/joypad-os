@@ -106,6 +106,7 @@ CONSOLE_usb_feather_rp2040_usb_host_max3421 := joypad_usb_feather_rp2040_usb_hos
 CONSOLE_usb_rp2040zero := joypad_usb_rp2040zero
 CONSOLE_usb_rp2350usba := joypad_usb_rp2350usba
 CONSOLE_bt2usb := joypad_bt2usb
+CONSOLE_bt2tink := joypad_bt2tink
 CONSOLE_mouthpad := joypad_mouthpad
 CONSOLE_bt2loopy := joypad_bt2loopy
 CONSOLE_bt2nuon := joypad_bt2nuon
@@ -205,6 +206,8 @@ APP_usb2usb_remapper_v7 := pico usb2usb_remapper_v7 usb2usb_remapper_v7 USB USB
 APP_usb2usb_rp2350usba := rp2350usba usb_rp2350usba usb2usb_rp2350usba USB/BT USB
 APP_bt2usb_pico_w := pico_w bt2usb bt2usb_pico_w Bluetooth USB
 APP_bt2usb_pico2_w := pico2_w bt2usb bt2usb_pico2_w Bluetooth USB
+APP_bt2tink_pico_w := pico_w bt2tink bt2tink_pico_w Bluetooth RetroTINK_IR/FTDI
+APP_bt2tink_pico2_w := pico2_w bt2tink bt2tink_pico2_w Bluetooth RetroTINK_IR/FTDI
 APP_mouthpad_pico_w := pico_w mouthpad mouthpad_pico_w MouthPad-BLE USB+NUS
 APP_mouthpad_pico2_w := pico2_w mouthpad mouthpad_pico2_w MouthPad-BLE USB+NUS
 APP_bt2usb_waveshare_rp2350b_plus_w := waveshare_rp2350b_plus_w bt2usb bt2usb_waveshare_rp2350b_plus_w Bluetooth USB
@@ -799,6 +802,14 @@ bt2usb_pico_w:
 .PHONY: bt2usb_pico2_w
 bt2usb_pico2_w:
 	$(call build_app,bt2usb_pico2_w)
+
+.PHONY: bt2tink_pico_w
+bt2tink_pico_w:
+	$(call build_app,bt2tink_pico_w)
+
+.PHONY: bt2tink_pico2_w
+bt2tink_pico2_w:
+	$(call build_app,bt2tink_pico2_w)	
 
 .PHONY: mouthpad_pico_w
 mouthpad_pico_w:
@@ -1770,6 +1781,14 @@ flash-bt2usb_pico_w:
 .PHONY: flash-bt2usb_pico2_w
 flash-bt2usb_pico2_w:
 	@$(MAKE) --no-print-directory _flash_app APP_NAME=bt2usb_pico2_w
+
+.PHONY: flash-bt2tink_pico_w
+flash-bt2tink_pico_w:
+	@$(MAKE) --no-print-directory _flash_app APP_NAME=bt2tink_pico_w
+
+.PHONY: flash-bt2tink_pico2_w
+flash-bt2tink_pico2_w:
+	@$(MAKE) --no-print-directory _flash_app APP_NAME=bt2tink_pico2_w	
 
 .PHONY: flash-bt2usb_waveshare_rp2350b_plus_w
 flash-bt2usb_waveshare_rp2350b_plus_w:

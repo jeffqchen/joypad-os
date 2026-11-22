@@ -131,7 +131,22 @@
 #ifndef CFG_TUH_HUB
 #define CFG_TUH_HUB                 4
 #endif
+//#define CFG_TUH_CDC                 0
+
+// AI Code
+#ifdef CONFIG_bt2tink
+#define CFG_TUH_CDC                 1
+#define CFG_TUH_CDC_FTDI            1
+#define CFG_TUH_XINPUT              0
+#define CFG_TUH_CDC_LINE_CODING_ON_ENUM \
+    { 2000000, CDC_LINE_CODING_STOP_BITS_1, \
+      CDC_LINE_CODING_PARITY_NONE, 8 }
+#else
 #define CFG_TUH_CDC                 0
+#define CFG_TUH_XINPUT              8
+#endif
+// End of AI Code
+
 #define CFG_TUH_HID                 8   // Max 8 HID interfaces total (2 per device typical)
 // Mass storage host: opt-in per target via CONFIG_USB_MSC. Default-off so
 // targets that don't link msc_host.c don't drag in the TinyUSB MSC class.
@@ -140,8 +155,9 @@
 #else
 #define CFG_TUH_MSC                 0
 #endif
+
 #define CFG_TUH_VENDOR              0
-#define CFG_TUH_XINPUT              8   // Max 8 XInput interfaces (5 pads through a hub + Xbox wireless adapter ports)
+//#define CFG_TUH_XINPUT              8   // Max 8 XInput interfaces (5 pads through a hub + Xbox wireless adapter ports)
 
 // Bluetooth dongle support - only enabled when ENABLE_BTSTACK is defined by CMake
 // CYW43 targets use built-in BT via pico_btstack, not USB dongle class
