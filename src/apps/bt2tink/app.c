@@ -359,11 +359,53 @@ static void oled_update_display(void)
 // AI Code //
 // static uint32_t previous_buttons = 0;
 
+static uint32_t map_retro_tink_controls(uint32_t buttons)
+{
+    uint32_t controls = 0;
+
+    if (buttons & JP_BUTTON_DU)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_UP);
+    if (buttons & JP_BUTTON_DD)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_DOWN);
+    if (buttons & JP_BUTTON_DL)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_LEFT);
+    if (buttons & JP_BUTTON_DR)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_RIGHT);
+
+    if (buttons & JP_BUTTON_B1)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_OK);
+    if (buttons & JP_BUTTON_B2)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_BACK);
+    if (buttons & JP_BUTTON_S2)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_MENU);
+    if (buttons & JP_BUTTON_S1)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_DIAG);
+    if (buttons & JP_BUTTON_A2)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_PROF);
+
+    if (buttons & JP_BUTTON_B4)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_NEXT);
+    if (buttons & JP_BUTTON_B3)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_PREVIOUS);
+    if (buttons & JP_BUTTON_A1)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_HOME);
+
+    if (buttons & JP_BUTTON_L3)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_L3);
+    if (buttons & JP_BUTTON_R3)
+        controls |= RETROTINK_INPUT_BIT(RETROTINK_INPUT_R3);
+
+    return controls;
+}
+
 static void bt_input_callback(const input_event_t *event)
 {
     if (event->valid_fields == 0 ||
         (event->valid_fields & INPUT_VALID_BUTTONS))
     {
+        retrotink_device_set_input_state(
+            map_retro_tink_controls(event->buttons)
+        );
 
         if (!bt_idle_buttons_initialized)
         {
@@ -380,7 +422,7 @@ static void bt_input_callback(const input_event_t *event)
         tink_rumble_process(event->buttons);
     }
 }
-// End AI Code //
+
 
 // ============================================================================
 // APP INITIALIZATION
