@@ -6,7 +6,7 @@
 #include "tink_input.h"
 #include "command/tink_command.h"
 
-#include "native/device/retrotink/retrotink_device.h"
+#include "retrotink_device.h"
 #include "pico/time.h"
 
 static uint32_t current_controls;
