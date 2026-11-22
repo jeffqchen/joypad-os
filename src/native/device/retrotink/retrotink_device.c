@@ -1,5 +1,8 @@
 #include "retrotink_device.h"
 
+#include <stdbool.h>
+#include <stdio.h>
+
 #include "core/output_interface.h"
 #include "core/router/router.h"
 
