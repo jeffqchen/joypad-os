@@ -365,8 +365,8 @@ void tink_input_task(void)
     uint32_t controls = current_controls;
     uint32_t pressed = controls & ~previous_controls;
 
-    if (tink_command_take_ir_repeat_started_event()) {
-        printf("[tink_input] IR repeat frame started\n");
+    if (tink_command_take_ir_nec_repeat_frame_started_event()) {
+        printf("[tink_input] IR NEC repeat frame started\n");
     }
 
     process_single_presses(pressed);

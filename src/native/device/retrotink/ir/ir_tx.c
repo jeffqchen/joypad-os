@@ -52,8 +52,8 @@ static uint64_t tx_frame_start_time_us;
 /* Repeat-session information shared with the alarm callback. */
 static volatile bool repeat_active;
 static volatile uint32_t repeat_generation;
-static volatile bool repeat_started_event;
-static volatile bool repeat_start_notified;
+static volatile bool nec_repeat_frame_started_event;
+static volatile bool nec_repeat_frame_start_notified;
 
 static uint slice_num;
 static uint16_t carrier_duty;
@@ -174,9 +174,9 @@ static int64_t ir_alarm_callback(
                 !tx_frame_full_repeat) {
 
                 /* The first NEC repeat frame begins after the initial frame gap. */
-                if (!repeat_start_notified) {
-                    repeat_started_event = true;
-                    repeat_start_notified = true;
+                if (!nec_repeat_frame_start_notified) {
+                    nec_repeat_frame_started_event = true;
+                    nec_repeat_frame_start_notified = true;
                 }
 
                 return start_repeat_frame();
@@ -226,8 +226,8 @@ void ir_tx_init(void)
 
     repeat_active = false;
     repeat_generation = 0;
-    repeat_started_event = false;
-    repeat_start_notified = false;
+    nec_repeat_frame_started_event = false;
+    nec_repeat_frame_start_notified = false;
 
     gpio_set_function(IR_TX_GPIO, GPIO_FUNC_PWM);
 
@@ -302,8 +302,8 @@ bool ir_tx_start_repeat(uint16_t command)
 
     repeat_generation = new_generation;
     repeat_active = true;
-    repeat_started_event = false;
-    repeat_start_notified = false;
+    nec_repeat_frame_started_event = false;
+    nec_repeat_frame_start_notified = false;
 
     return true;
 }
@@ -356,8 +356,8 @@ bool ir_tx_start_full_repeat(uint16_t command)
 
     repeat_generation = new_generation;
     repeat_active = true;
-    repeat_started_event = false;
-    repeat_start_notified = false;
+    nec_repeat_frame_started_event = false;
+    nec_repeat_frame_start_notified = false;
 
     return true;
 }
@@ -375,13 +375,13 @@ void ir_tx_stop_repeat(void)
 }
 
 /* Consume the task-context notification that a repeat frame actually began. */
-bool ir_tx_take_repeat_started_event(void)
+bool ir_tx_take_nec_repeat_frame_started_event(void)
 {
-    if (!repeat_started_event) {
+    if (!nec_repeat_frame_started_event) {
         return false;
     }
 
-    repeat_started_event = false;
+    nec_repeat_frame_started_event = false;
     return true;
 }
 
@@ -426,12 +426,6 @@ start_transmission:
     tx_frame_is_repeat = entry.is_repeat;
     tx_frame_repeat_generation = entry.generation;
     tx_frame_full_repeat = entry.full_frame_repeat;
-
-    /* Full-frame repeats begin only after the initial hold delay and are queued. */
-    if (entry.is_repeat && !entry.initial_frame && !repeat_start_notified) {
-        repeat_started_event = true;
-        repeat_start_notified = true;
-    }
 
     tx_frame_start_time_us = time_us_64();
     

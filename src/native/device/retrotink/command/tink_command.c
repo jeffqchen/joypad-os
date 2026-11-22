@@ -187,7 +187,7 @@ bool tink_command_is_cdc_connected(void)
     return tink_cdc_is_connected();
 }
 
-bool tink_command_take_ir_repeat_started_event(void)
+bool tink_command_take_ir_nec_repeat_frame_started_event(void)
 {
-    return ir_tx_take_repeat_started_event();
+    return ir_tx_take_nec_repeat_frame_started_event();
 }
