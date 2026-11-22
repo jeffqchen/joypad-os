@@ -356,6 +356,8 @@ bool ir_tx_start_full_repeat(uint16_t command)
 
     repeat_generation = new_generation;
     repeat_active = true;
+    repeat_started_event = false;
+    repeat_start_notified = false;
 
     return true;
 }
