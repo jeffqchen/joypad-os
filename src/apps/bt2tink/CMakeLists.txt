@@ -125,6 +125,7 @@ target_link_libraries(joypad_bt2tink PRIVATE
     hardware_pwm
 )
 
+joypad_target_common(joypad_bt2tink "${PROJECT_SOURCE_DIR}")
 pico_enable_stdio_usb(joypad_bt2tink 0)
 if(JEFF_CMSIS_DAP_DEBUG)
     pico_enable_stdio_uart(joypad_bt2tink 1)

@@ -485,8 +485,15 @@ set(CONTROLLER_LIBRARIES pico_stdlib pico_multicore hardware_pio hardware_adc ha
 function(joypad_target_common TARGET)
     target_compile_options(${TARGET} PRIVATE -O3)
     pico_add_extra_outputs(${TARGET})
-    pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/core/services/leds/neopixel/ws2812.pio)
-    target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/common ${CMAKE_CURRENT_SOURCE_DIR}/lib/libxsm3)
+    # Optional source root for applications defined in subdirectories.
+    # Existing root-level callers retain the original directory behavior.
+    if(ARGC GREATER 1)
+        set(_joypad_source_dir "${ARGV1}")
+    else()
+        set(_joypad_source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+    pico_generate_pio_header(${TARGET} ${_joypad_source_dir}/core/services/leds/neopixel/ws2812.pio)
+    target_include_directories(${TARGET} PUBLIC ${_joypad_source_dir} ${_joypad_source_dir}/common ${_joypad_source_dir}/lib/libxsm3)
     # Add version and build info to all targets
     target_compile_definitions(${TARGET} PRIVATE
         JOYPAD_VERSION="${JOYPAD_VERSION}"
@@ -2400,7 +2407,6 @@ if (PICO_BOARD STREQUAL "pico_w" OR
 
     # --- BT to Tink (Pico W / Pico 2 W / Waveshare RP2350B-Plus-W built-in Bluetooth) ---
     add_subdirectory(apps/bt2tink)
-    joypad_target_common(joypad_bt2tink)
 endif()
 
 # --- Controller for ABB (RP2040 Advanced Breakout Board - Passthrough) ---
