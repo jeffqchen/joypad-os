@@ -2449,13 +2449,11 @@ if (PICO_BOARD STREQUAL "pico_w" OR
         )
     endif()
     
-    # AI Code
     set(BT2TINK_USB_HOST_SOURCES ${USB_HOST_SOURCES})
 
     list(REMOVE_ITEM BT2TINK_USB_HOST_SOURCES
         ${CMAKE_CURRENT_SOURCE_DIR}/usb/usbh/xinput/xinput.c
     )
-    # End of AI Code
 
     target_sources(joypad_bt2tink PUBLIC
         ${CORE_SOURCES}
