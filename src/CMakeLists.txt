@@ -2501,7 +2501,14 @@ if (PICO_BOARD STREQUAL "pico_w" OR
     )
     joypad_target_common(joypad_bt2tink)
     pico_enable_stdio_usb(joypad_bt2tink 0)
-    pico_enable_stdio_uart(joypad_bt2tink 1)
+    if (DEFINED ENV{JEFF_CMSIS_DAP_DEBUG} AND
+        "$ENV{JEFF_CMSIS_DAP_DEBUG}" STREQUAL "ON")
+        message(STATUS "BT2TINK: UART stdio redirection ENABLED")
+        pico_enable_stdio_uart(joypad_bt2tink 1)
+    else()
+        message(STATUS "BT2TINK: UART stdio redirection DISABLED")
+        pico_enable_stdio_uart(joypad_bt2tink 0)
+    endif()
     
 endif()
 
