@@ -356,7 +356,6 @@ static void oled_update_display(void)
 
 #endif // OLED_I2C_DISPLAY
 
-// AI Code //
 // static uint32_t previous_buttons = 0;
 
 static uint32_t map_retro_tink_controls(uint32_t buttons)
@@ -457,10 +456,8 @@ void app_init(void)
     printf("[app:bt2tink] Pico W built-in Bluetooth -> RetroTINK IR\n");
 #endif
 
-    // AI Code //
     // Initialize USB host stack
     usbh_init();
-    // End of AI Code //
 
     // Initialize button service (uses BOOTSEL button on Pico W)
     button_init();
@@ -484,10 +481,8 @@ void app_init(void)
         OUTPUT_TARGET_RETROTINK,
         0);
 
-    // AI Code //
     retrotink_device_set_input_callback(bt_input_callback);
     retrotink_device_start();
-    // End AI Code //
 
     // Configure player management
     player_config_t player_cfg = {
@@ -531,7 +526,6 @@ void app_task(void)
     // Process Bluetooth transport
     bt_task();
 
-    // AI Code //
     usbh_task();
 
     // Detect controller connection and disconnection
@@ -576,7 +570,6 @@ void app_task(void)
     // Process Bluetooth controller feedback
     tink_rumble_task();
 
-    // End AI Code //
 
     // Update LED status
     leds_set_connected_devices(btstack_classic_get_connection_count());
