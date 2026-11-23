@@ -9,6 +9,12 @@ option(JEFF_CMSIS_DAP_DEBUG
 )
 
 add_executable(joypad_bt2tink)
+# Keep firmware artifacts in the top-level build directory, matching the
+# repository's generic Makefile packaging convention. Targets declared from
+# an app subdirectory otherwise place their UF2 files under build/apps/bt2tink.
+set_target_properties(joypad_bt2tink PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+)
 target_compile_definitions(joypad_bt2tink PRIVATE
     CONFIG_bt2tink=1
     # CONFIG_bt2tink enables the TinyUSB host CDC + FTDI configuration in
