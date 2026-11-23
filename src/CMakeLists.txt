@@ -485,15 +485,8 @@ set(CONTROLLER_LIBRARIES pico_stdlib pico_multicore hardware_pio hardware_adc ha
 function(joypad_target_common TARGET)
     target_compile_options(${TARGET} PRIVATE -O3)
     pico_add_extra_outputs(${TARGET})
-    # Optional source root for applications defined in subdirectories.
-    # Existing root-level callers retain the original directory behavior.
-    if(ARGC GREATER 1)
-        set(_joypad_source_dir "${ARGV1}")
-    else()
-        set(_joypad_source_dir "${CMAKE_CURRENT_SOURCE_DIR}")
-    endif()
-    pico_generate_pio_header(${TARGET} ${_joypad_source_dir}/core/services/leds/neopixel/ws2812.pio)
-    target_include_directories(${TARGET} PUBLIC ${_joypad_source_dir} ${_joypad_source_dir}/common ${_joypad_source_dir}/lib/libxsm3)
+    pico_generate_pio_header(${TARGET} ${CMAKE_CURRENT_LIST_DIR}/core/services/leds/neopixel/ws2812.pio)
+    target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/common ${CMAKE_CURRENT_SOURCE_DIR}/lib/libxsm3)
     # Add version and build info to all targets
     target_compile_definitions(${TARGET} PRIVATE
         JOYPAD_VERSION="${JOYPAD_VERSION}"
@@ -2406,7 +2399,110 @@ if (PICO_BOARD STREQUAL "pico_w" OR
     pico_enable_stdio_uart(joypad_wifi2usb 1)
 
     # --- BT to Tink (Pico W / Pico 2 W / Waveshare RP2350B-Plus-W built-in Bluetooth) ---
-    add_subdirectory(apps/bt2tink)
+    add_executable(joypad_bt2tink)
+    target_compile_definitions(joypad_bt2tink PRIVATE
+        CONFIG_bt2tink=1
+        #CONFIG_USB=1
+        #DISABLE_USB_HOST=1
+        #USBD_DEFAULT_MODE=USB_OUTPUT_MODE_SINPUT
+        USE_BOOTSEL_BUTTON=1
+        CYW43_LWIP=0
+        # BTstack uses async_context, not embedded run loop
+        BTSTACK_USE_CYW43=1
+        ENABLE_BTSTACK=1
+        # bt_transport.c gates bthid_registry_init() on this (see #188). Manual-BT
+        # apps don't go through joypad_add_btstack(), so they must define it here or
+        # the registry is never initialised and every BT controller falls to the
+        # generic gamepad driver (--gc-sections discards the whole registry).
+        CONFIG_BT_HOST=1
+        PICO_DEFAULT_UART=1
+        PICO_DEFAULT_UART_TX_PIN=4
+        PICO_DEFAULT_UART_RX_PIN=5
+    )
+    # DualSense voice/show modes (opt-in, all disabled by default).
+    # CONFIG_DS5_DROP_SCREAM doubles as the base voice-engine flag (0x36 audio
+    # streaming, hci_dump CID tap, buffers); modes layer on top of it:
+    #   DS5_DROP_SCREAM=1  make bt2tink_pico_w   -> drop-scream + fireworks
+    #   DS5_FISHER_PRICE=1 make bt2tink_pico_w   -> kids numbers/letters mode
+    #   DS5_COMPANION=1    make bt2tink_pico_w   -> LLM voice companion bridge
+    # No BTstack modifications required. Assets: tools/ds5-scream/encode.py.
+    if (DEFINED ENV{DS5_DROP_SCREAM})
+        message(STATUS "joypad_bt2tink: DS5 drop-scream + fireworks ENABLED")
+        target_compile_definitions(joypad_bt2tink PRIVATE CONFIG_DS5_DROP_SCREAM=1)
+    endif()
+    if (DEFINED ENV{DS5_FISHER_PRICE})
+        message(STATUS "joypad_bt2tink: DS5 Fisher-Price mode ENABLED")
+        target_compile_definitions(joypad_bt2tink PRIVATE
+            CONFIG_DS5_DROP_SCREAM=1
+            CONFIG_DS5_FISHER_PRICE=1
+        )
+    endif()
+    if (DEFINED ENV{DS5_ROBOT})
+        message(STATUS "joypad_bt2tink: DS5 Robot mode ENABLED")
+        target_compile_definitions(joypad_bt2tink PRIVATE
+            CONFIG_DS5_DROP_SCREAM=1
+            CONFIG_DS5_ROBOT=1
+        )
+    endif()
+    if (DEFINED ENV{DS5_COMPANION})
+        message(STATUS "joypad_bt2tink: DS5 AI companion mode ENABLED")
+        target_compile_definitions(joypad_bt2tink PRIVATE
+            CONFIG_DS5_DROP_SCREAM=1
+            CONFIG_DS5_COMPANION=1
+        )
+    endif()
+    
+    # AI Code
+    set(BT2TINK_USB_HOST_SOURCES ${USB_HOST_SOURCES})
+
+    list(REMOVE_ITEM BT2TINK_USB_HOST_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/usb/usbh/xinput/xinput.c
+    )
+    # End of AI Code
+
+    target_sources(joypad_bt2tink PUBLIC
+        ${CORE_SOURCES}
+        ${BT2TINK_USB_HOST_SOURCES}
+        ${BTHID_DEVICE_SOURCES}
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/btstack/btstack_host.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/btstack/bt_device_db.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/transport/bt_transport.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/transport/bt_transport_cyw43.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/apps/bt2tink/app.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/apps/bt2tink/tink_rumble.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink/retrotink_device.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink/tink_input.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink/ir/ir_tx.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink/usb/tink_cdc.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink/command/tink_command.c
+    )
+
+    target_include_directories(joypad_bt2tink PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/apps/bt2tink
+        ${CMAKE_CURRENT_SOURCE_DIR}/native/device/retrotink
+        ${CMAKE_CURRENT_SOURCE_DIR}/usb/usbd
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/btstack
+        ${CMAKE_CURRENT_SOURCE_DIR}/bt/bthid
+        ${BTSTACK_INCLUDES}
+    )
+    target_link_libraries(joypad_bt2tink PRIVATE
+        pico_stdlib
+        pico_multicore
+        pico_rand
+        pico_cyw43_arch_poll
+        pico_btstack_ble
+        pico_btstack_classic
+        pico_btstack_cyw43
+        #tinyusb_device
+        tinyusb_host
+        tinyusb_board
+        hardware_pwm
+    )
+    joypad_target_common(joypad_bt2tink)
+    pico_enable_stdio_usb(joypad_bt2tink 0)
+    pico_enable_stdio_uart(joypad_bt2tink 1)
+    
 endif()
 
 # --- Controller for ABB (RP2040 Advanced Breakout Board - Passthrough) ---

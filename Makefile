@@ -3,10 +3,6 @@
 
 # Load local environment overrides (gitignored)
 -include .env
-
-# BT2TINK hardware UART logging is opt-in.
-JEFF_CMSIS_DAP_DEBUG ?= OFF
-
 export
 
 # Default target
