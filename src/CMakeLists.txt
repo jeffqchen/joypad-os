@@ -2402,9 +2402,6 @@ if (PICO_BOARD STREQUAL "pico_w" OR
     add_executable(joypad_bt2tink)
     target_compile_definitions(joypad_bt2tink PRIVATE
         CONFIG_bt2tink=1
-        #CONFIG_USB=1
-        #DISABLE_USB_HOST=1
-        #USBD_DEFAULT_MODE=USB_OUTPUT_MODE_SINPUT
         USE_BOOTSEL_BUTTON=1
         CYW43_LWIP=0
         # BTstack uses async_context, not embedded run loop
@@ -2494,7 +2491,6 @@ if (PICO_BOARD STREQUAL "pico_w" OR
         pico_btstack_ble
         pico_btstack_classic
         pico_btstack_cyw43
-        #tinyusb_device
         tinyusb_host
         tinyusb_board
         hardware_pwm
