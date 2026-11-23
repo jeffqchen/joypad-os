@@ -809,7 +809,7 @@ bt2tink_pico_w:
 
 .PHONY: bt2tink_pico2_w
 bt2tink_pico2_w:
-	$(call build_app,bt2tink_pico2_w)	
+	$(call build_app,bt2tink_pico2_w)
 
 .PHONY: mouthpad_pico_w
 mouthpad_pico_w:
@@ -1788,7 +1788,7 @@ flash-bt2tink_pico_w:
 
 .PHONY: flash-bt2tink_pico2_w
 flash-bt2tink_pico2_w:
-	@$(MAKE) --no-print-directory _flash_app APP_NAME=bt2tink_pico2_w	
+	@$(MAKE) --no-print-directory _flash_app APP_NAME=bt2tink_pico2_w
 
 .PHONY: flash-bt2usb_waveshare_rp2350b_plus_w
 flash-bt2usb_waveshare_rp2350b_plus_w:
